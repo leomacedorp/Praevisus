@@ -1,0 +1,19 @@
+# wrangler.toml
+# Configuração do Worker Praevisus para Cloudflare
+
+name = "praevisus"
+main = "src/index.js"
+compatibility_date = "2024-12-18"
+
+# 🔁 Executa a cada 15 minutos
+[triggers]
+crons = ["*/15 * * * *"]
+
+# 🗄️ Armazenamento de histórico (KV)
+[[kv_namespaces]]
+binding = "MONITOR_KV"
+id = "YOUR_KV_ID"   # ⚠️ Você criará esse ID no Cloudflare manualmente
+
+# 🔑 Variáveis de ambiente (a chave será configurada depois)
+[vars]
+# GEMINI_API_KEY será definida via dashboard ou secrets
