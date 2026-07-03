@@ -1,33 +1,31 @@
 // src/index.js
-// Hermes — Sistema de Monitoramento Defcon5 (Cloudflare Worker)
+// Hermes/Praevisus — usando NVIDIA NIM (DeepSeek-V4-Pro)
 
 export default {
-  // Executa a cada 15 minutos via cron trigger
   async scheduled(event, env, ctx) {
     await runMonitor(env);
   },
 
-  // Endpoint para teste manual: /test
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/test') {
       await runMonitor(env);
       return new Response('✅ Monitor executado! Verifique os logs.', { status: 200 });
     }
-    return new Response('📡 Hermes ativo. Use /test para executar uma rodada manual.', { status: 200 });
+    return new Response('📡 Praevisus ativo. Use /test para executar uma rodada manual.', { status: 200 });
   }
 };
 
 async function runMonitor(env) {
-  const GEMINI_API_KEY = env.GEMINI_API_KEY;
-  if (!GEMINI_API_KEY) {
-    console.error('❌ Chave Gemini não configurada. Adicione GEMINI_API_KEY nas variáveis de ambiente.');
+  const NVIDIA_API_KEY = env.NVIDIA_API_KEY;
+  if (!NVIDIA_API_KEY) {
+    console.error('❌ NVIDIA_API_KEY não configurada. Adicione via wrangler secret.');
     return;
   }
 
-  console.log('🛰️ Hermes iniciando coleta...');
+  console.log('🛰️ Praevisus iniciando coleta...');
 
-  // 1. Coletar feeds RSS (exemplo: G1 e Folha)
+  // 1. Coletar feeds
   const feeds = [
     'https://g1.globo.com/rss/g1/',
     'https://feeds.folha.uol.com.br/folha/mercado/rss091.xml'
@@ -53,7 +51,7 @@ async function runMonitor(env) {
 
   if (allTitles.length === 0) return;
 
-  // 2. Analisar com IA (Gemini)
+  // 2. Preparar prompt
   const prompt = `
   Atue como Analista Defcon5.
   Analise os seguintes títulos de notícias.
@@ -66,22 +64,32 @@ async function runMonitor(env) {
   Responda APENAS em JSON com a estrutura: [{"titulo": "x", "classificacao": "SINAL/RUÍDO", "motivo": "x"}]
   `;
 
+  // 3. Chamada à NVIDIA NIM (compatível com OpenAI)
   const payload = {
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2 }
+    model: 'deepseek-ai/deepseek-v4-pro', // ou 'nvidia/nemotron-3-ultra-550b-a55b'
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.2,
+    response_format: { type: 'json_object' }
   };
 
   try {
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }
-    );
+    const resp = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${NVIDIA_API_KEY}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error(`❌ Erro na API NVIDIA: ${resp.status} ${resp.statusText}`, errorText);
+      return;
+    }
+
     const data = await resp.json();
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    const raw = data?.choices?.[0]?.message?.content || '[]';
     const match = raw.match(/\[[\s\S]*\]/);
     if (match) {
       const results = JSON.parse(match[0]);
@@ -91,7 +99,6 @@ async function runMonitor(env) {
         await env.MONITOR_KV.put(key, JSON.stringify({ timestamp: new Date().toISOString(), results }));
         console.log(`✅ Relatório salvo no KV: ${key}`);
       }
-      // Log dos sinais
       const sinais = results.filter(r => r.classificacao === 'SINAL');
       if (sinais.length > 0) {
         console.log('🔴 Sinais detectados:', sinais.map(s => s.titulo).join(', '));
