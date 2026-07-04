@@ -12,8 +12,8 @@ crons = ["*/15 * * * *"]
 # 🗄️ Armazenamento de histórico (KV)
 [[kv_namespaces]]
 binding = "MONITOR_KV"
-id = "YOUR_KV_ID"   # ⚠️ Você criará esse ID no Cloudflare manualmente
+id = "164af2869f4d4b91a52634d7c149a45b"
 
 # 🔑 Variáveis de ambiente (a chave será configurada depois)
 [vars]
-# GEMINI_API_KEY será definida via dashboard ou secrets
+# NVIDIA_API_KEY será definida via wrangler secret
