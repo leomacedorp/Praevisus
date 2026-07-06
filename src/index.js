@@ -8,11 +8,14 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === '/test') {
+    const isTest = url.pathname === '/test' || url.searchParams.get('run') === '1' || url.searchParams.get('test') === '1';
+
+    if (isTest) {
       await runMonitor(env);
       return new Response('✅ Monitor executado! Verifique os logs.', { status: 200 });
     }
-    return new Response('📡 Praevisus ativo. Use /test para executar uma rodada manual.', { status: 200 });
+
+    return new Response('📡 Praevisus ativo. Use /test ou ?run=1 para executar uma rodada manual.', { status: 200 });
   }
 };
 
@@ -32,9 +35,9 @@ async function runMonitor(env) {
   ];
 
   let allTitles = [];
-  for (const url of feeds) {
+  for (const feedUrl of feeds) {
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(feedUrl);
       const text = await resp.text();
       const titles = text.match(/<title>(.*?)<\/title>/g) || [];
       titles.forEach(t => {
@@ -42,7 +45,7 @@ async function runMonitor(env) {
         if (clean && clean.length > 10) allTitles.push(clean);
       });
     } catch (e) {
-      console.error(`Erro ao buscar feed: ${url}`, e);
+      console.error(`Erro ao buscar feed: ${feedUrl}`, e);
     }
   }
 
@@ -66,7 +69,7 @@ async function runMonitor(env) {
 
   // 3. Chamada à NVIDIA NIM (compatível com OpenAI)
   const payload = {
-    model: 'deepseek-ai/deepseek-v4-pro', // ou 'nvidia/nemotron-3-ultra-550b-a55b'
+    model: 'deepseek-ai/deepseek-v4-pro',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.2,
     response_format: { type: 'json_object' }
@@ -93,7 +96,6 @@ async function runMonitor(env) {
     const match = raw.match(/\[[\s\S]*\]/);
     if (match) {
       const results = JSON.parse(match[0]);
-      // Salvar no KV se existir
       if (env.MONITOR_KV) {
         const key = `relatorio_${new Date().toISOString().replace(/[:.]/g, '-')}`;
         await env.MONITOR_KV.put(key, JSON.stringify({ timestamp: new Date().toISOString(), results }));
