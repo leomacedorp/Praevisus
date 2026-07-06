@@ -14,6 +14,9 @@ crons = ["*/15 * * * *"]
 binding = "MONITOR_KV"
 id = "164af2869f4d4b91a52634d7c149a45b"
 
-# 🔑 Variáveis de ambiente (a chave será configurada depois)
+# 🔑 Variáveis esperadas em runtime
 [vars]
-# NVIDIA_API_KEY será definida via wrangler secret
+# Configure no dashboard/secret:
+# - NVIDIA_API_KEY
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_ROLE_KEY
