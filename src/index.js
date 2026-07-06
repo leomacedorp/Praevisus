@@ -3,23 +3,23 @@
 
 export default {
   async scheduled(event, env, ctx) {
-    await runMonitor(env);
+    ctx.waitUntil(runMonitor(env, false));
   },
 
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const isTest = url.pathname === '/test' || url.searchParams.get('run') === '1' || url.searchParams.get('test') === '1';
 
     if (isTest) {
-      await runMonitor(env);
-      return new Response('✅ Monitor executado! Verifique os logs.', { status: 200 });
+      ctx.waitUntil(runMonitor(env, true));
+      return new Response('✅ Monitor executado em background! Verifique os logs.', { status: 200 });
     }
 
     return new Response('📡 Praevisus ativo. Use /test ou ?run=1 para executar uma rodada manual.', { status: 200 });
   }
 };
 
-async function runMonitor(env) {
+async function runMonitor(env, isTest = false) {
   const NVIDIA_API_KEY = env.NVIDIA_API_KEY;
   if (!NVIDIA_API_KEY) {
     console.error('❌ NVIDIA_API_KEY não configurada. Adicione via wrangler secret.');
@@ -28,7 +28,6 @@ async function runMonitor(env) {
 
   console.log('🛰️ Praevisus iniciando coleta...');
 
-  // 1. Coletar feeds
   const feeds = [
     'https://g1.globo.com/rss/g1/',
     'https://feeds.folha.uol.com.br/folha/mercado/rss091.xml'
@@ -50,11 +49,20 @@ async function runMonitor(env) {
   }
 
   allTitles = [...new Set(allTitles)];
+
+  if (isTest) {
+    allTitles = allTitles.slice(0, 5);
+  }
+
   console.log(`📰 Coletados ${allTitles.length} títulos.`);
+
+  if (isTest) {
+    console.log('🧪 Modo teste: análise IA pulada para evitar timeout.');
+    return;
+  }
 
   if (allTitles.length === 0) return;
 
-  // 2. Preparar prompt
   const prompt = `
   Atue como Analista Defcon5.
   Analise os seguintes títulos de notícias.
@@ -67,7 +75,6 @@ async function runMonitor(env) {
   Responda APENAS em JSON com a estrutura: [{"titulo": "x", "classificacao": "SINAL/RUÍDO", "motivo": "x"}]
   `;
 
-  // 3. Chamada à NVIDIA NIM (compatível com OpenAI)
   const payload = {
     model: 'deepseek-ai/deepseek-v4-pro',
     messages: [{ role: 'user', content: prompt }],
